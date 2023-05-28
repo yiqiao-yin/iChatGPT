@@ -6,6 +6,10 @@ Credits @ [deepanshu88](https://github.com/deepanshu88/shinyChatGPT)
 
 I used [How to build ChatGPT Clone in Shiny App](https://www.listendata.com/2023/04/how-to-build-chatgpt-clone-in-shiny.html)
 
+## App
+
+Here's my app uploaded live: [Chatbot-IO](https://y-yin.shinyapps.io/chatbot-io/)
+
 ## Motivation
 
 The objective of this repository is to provide a guide on creating a custom UI using R Shiny app for building a ChatGPT clone. This allows users to have a unique interface that suits their specific needs, such as incorporating their company logo. Furthermore, the chatbot feature can be integrated into their website without relying on ChatGPT website's monthly paid subscription. This method proves cost-effective for a large number of users, as APIs cost less than the monthly subscription.
