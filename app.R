@@ -18,6 +18,65 @@ if (container) {
   }
 }'
 
+
+cosine_similarity <- function(str1, str2) {
+  # Tokenize strings into words
+  words1 <- strsplit(str1, " ")[[1]]
+  words2 <- strsplit(str2, " ")[[1]]
+  
+  # Compute word frequencies for each string
+  freq1 <- table(words1)
+  freq2 <- table(words2)
+  
+  # Create a set of all unique words in both strings
+  all_words <- union(names(freq1), names(freq2))
+  
+  # Compute dot product and norms for each frequency vector
+  dot_product <- sum(data.frame(freq1[all_words] * freq2[all_words])[2], na.rm = TRUE)
+  norm1 <- sqrt(sum(data.frame(freq1[all_words]^2)[2], na.rm = TRUE))
+  norm2 <- sqrt(sum(data.frame(freq2[all_words]^2)[2], na.rm = TRUE))
+  
+  # Compute cosine similarity score (range [-1, 1])
+  if (norm1 == 0 | norm2 == 0) {
+    score <- 0
+  } else {
+    score <- dot_product / (norm1 * norm2)
+  }
+  
+  return(score)
+}
+
+
+levenshtein_dist <- function(str1, str2) {
+  n <- nchar(str1)
+  m <- nchar(str2)
+  d <- matrix(0, n + 1, m + 1)
+  
+  for (i in 1:(n + 1)) {
+    d[i, 1] <- i - 1
+  }
+  
+  for (j in 1:(m + 1)) {
+    d[1, j] <- j - 1
+  }
+  
+  for (j in 2:(m + 1)) {
+    for (i in 2:(n + 1)) {
+      if (substring(str1, i - 1, i - 1) == substring(str2, j - 1, j - 1)) {
+        substitution_cost <- 0
+      } else {
+        substitution_cost <- 1
+      }
+      
+      d[i, j] <- min(d[i - 1, j] + 1,          # deletion
+                     d[i, j - 1] + 1,          # insertion
+                     d[i - 1, j - 1] + substitution_cost)   # substitution
+    }
+  }
+  
+  return (1 - d[n + 1, m + 1] / max(n, m)) * 100
+}
+
 chatGPT_R <- function(apiKey, prompt, model = "gpt-3.5-turbo") {
   response <- POST(
     url = "https://api.openai.com/v1/chat/completions",
@@ -68,6 +127,18 @@ ui <- fluidPage(
                    "Model",
                    choices = c("gpt-3.5-turbo", "gpt-3.5-turbo-0301"),
                    selected = "gpt-3.5-turbo"
+                 ),
+                 selectInput(
+                   "domain",
+                   "Domain",
+                   choices = c("General", "Labcorp Annual Report 2022"),
+                   selected = "General"
+                 ),
+                 selectInput(
+                   "similarity",
+                   "Similarity",
+                   choices = c("Cosine", "Levenshtein"),
+                   selected = "Cosine"
                  ),
                  style = "background-color: #fff; color: #333; border: 1px solid #ccc;"
                ),
@@ -131,8 +202,33 @@ server <- function(input, output, session) {
                       color = transparent(.5))
       w$show()
       
+      # Get context
+      if (input$domain == "Labcorp Annual Report 2022") {
+        some_df <- read.csv('lh_ar_2022.csv')
+        user_question <- input$prompt
+        if (input$similarity == "Cosine") {
+          some_df['questions_l_score'] <- sapply(1:nrow(some_df), function(i){cosine_similarity(some_df[i, 3], user_question)})
+          some_df['answers_l_score'] <- sapply(1:nrow(some_df), function(i){cosine_similarity(some_df[i, 4], user_question)})
+        } else if (input$similarity == "Levenshtein") {
+          some_df['questions_l_score'] <- sapply(1:nrow(some_df), function(i){levenshtein_dist(some_df[i, 3], user_question)})
+          some_df['answers_l_score'] <- sapply(1:nrow(some_df), function(i){levenshtein_dist(some_df[i, 4], user_question)})
+        } else {
+          some_df['questions_l_score'] <- sapply(1:nrow(some_df), function(i){cosine_similarity(some_df[i, 3], user_question)})
+          some_df['answers_l_score'] <- sapply(1:nrow(some_df), function(i){cosine_similarity(some_df[i, 4], user_question)})
+        }
+        top_que_df <- some_df[order(some_df$questions_l_score, decreasing=TRUE),]
+        updated_prompt <- paste0(
+          'Use the following as background context: ',
+          paste0(paste(top_que_df$answers[1:5], " "), collapse=" "),
+          ' and then answer the question: ',
+          user_question
+        )
+      } else {
+        updated_prompt <- input$prompt
+      }
+      
       # Response
-      chatGPT <- chatGPT_R(input$apiKey, input$prompt, input$model)
+      chatGPT <- chatGPT_R(input$apiKey, updated_prompt, input$model)
       historyALL$val <- chatGPT
       history <- data.frame(
         users = c("Human", "AI"),
